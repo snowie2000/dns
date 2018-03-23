@@ -28,10 +28,11 @@ type Conn struct {
 
 // A Client defines parameters for a DNS client.
 type Client struct {
-	Net       string      // if "tcp" or "tcp-tls" (DNS over TLS) a TCP query will be initiated, otherwise an UDP one (default is "" for UDP)
-	UDPSize   uint16      // minimum receive buffer for UDP messages
-	TLSConfig *tls.Config // TLS connection configuration
-	Dialer    *net.Dialer // a net.Dialer used to set local address, timeouts and more
+	Net        string      // if "tcp" or "tcp-tls" (DNS over TLS) a TCP query will be initiated, otherwise an UDP one (default is "" for UDP)
+	UDPSize    uint16      // minimum receive buffer for UDP messages
+	TLSConfig  *tls.Config // TLS connection configuration
+	Dialer     *net.Dialer // a net.Dialer used to set local address, timeouts and more
+	DirectDial func(network, address string) (net.Conn, error)
 	// Timeout is a cumulative timeout for dial, write and read, defaults to 0 (disabled) - overrides DialTimeout, ReadTimeout,
 	// WriteTimeout when non-zero. Can be overridden with net.Dialer.Timeout (see Client.ExchangeWithDialer and
 	// Client.Dialer) or context.Context.Deadline (see the deprecated ExchangeContext)
@@ -112,7 +113,11 @@ func (c *Client) Dial(address string) (conn *Conn, err error) {
 	if useTLS {
 		conn.Conn, err = tls.DialWithDialer(&d, network, address, c.TLSConfig)
 	} else {
-		conn.Conn, err = d.Dial(network, address)
+		if c.DirectDial != nil {
+			conn.Conn, err = c.DirectDial(network, address)
+		} else {
+			conn.Conn, err = d.Dial(network, address)
+		}
 	}
 	if err != nil {
 		return nil, err
